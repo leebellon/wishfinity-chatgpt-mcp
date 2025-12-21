@@ -2,7 +2,15 @@ import express from "express";
 import { z } from "zod";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+
+/**
+ * Wishfinity ChatGPT App (Phase 1A) - SSE MCP server
+ *
+ * Endpoints:
+ *   GET  /sse        -> opens SSE stream (ChatGPT connects here)
+ *   POST /messages   -> receives MCP JSON-RPC messages
+ */
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -44,24 +52,42 @@ server.tool(
   }
 );
 
-// Health check
+// Store active transports by sessionId (works on Render because it's a single long-lived service)
+const transports = new Map();
+
 app.get("/", (_req, res) => {
   res.status(200).send("Wishfinity MCP server is running.");
 });
 
-// IMPORTANT: some clients do a GET probe to validate the endpoint.
-// Return 200 so the connector creation doesn't fail on a GET check.
-app.get("/mcp", (_req, res) => {
-  res.status(200).send("MCP endpoint ready. Use POST for MCP requests.");
+// SSE endpoint
+app.get("/sse", async (_req, res) => {
+  const transport = new SSEServerTransport("/messages", res);
+  const sessionId = transport.sessionId;
+  transports.set(sessionId, transport);
+
+  res.on("close", () => {
+    transports.delete(sessionId);
+  });
+
+  await server.connect(transport);
 });
 
-// Streamable HTTP MCP endpoint
-app.post("/mcp", async (req, res) => {
-  const transport = new StreamableHTTPServerTransport(req, res);
-  await server.connect(transport);
+// Messages endpoint
+app.post("/messages", async (req, res) => {
+  const sessionId = req.query.sessionId;
+  if (!sessionId || typeof sessionId !== "string") {
+    return res.status(400).send("Missing sessionId");
+  }
+
+  const transport = transports.get(sessionId);
+  if (!transport) {
+    return res.status(404).send("Unknown sessionId");
+  }
+
+  await transport.handlePostMessage(req, res);
 });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`MCP Streamable HTTP server listening on port ${port}`);
+  console.log(`MCP SSE server listening on port ${port}`);
 });
