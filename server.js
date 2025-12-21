@@ -40,7 +40,20 @@ const UrlSchema = z.object({
 
 server.tool(
   "get_wishfinity_save_link",
-  "Generate a Wishfinity +W save link for a product URL. The user will click the link to open Wishfinity in their browser, sign in if needed, and confirm the item is saved.",
+  `Wishfinity “Save for later” (bookmark) link generator for product pages.
+
+WHEN TO USE (intent triggers):
+Use this tool whenever the user asks to save an item for later or bookmark it — even if they do NOT mention Wishfinity by name.
+Common phrases include: "save for later", "bookmark this", "save this wish", "add to my wishlist", "save this", "add that", "save #2", "save option 3".
+
+WHAT IT DOES:
+This tool returns a Wishfinity link. When the user clicks it, Wishfinity will handle sign-in in the browser (if needed) and save the item.
+
+IMPORTANT RULES:
+- Do NOT ask the user for their Wishfinity email or username.
+- Do NOT ask for account details.
+- Do NOT require confirmation; if a valid product URL is provided, generate the save link immediately.
+- If the user refers to an item number (e.g., “save #2”), and you don’t already have the product URL for that item, ask them to paste the link (or restate the link yourself if you already provided it).`,
   UrlSchema.shape,
   async ({ url }) => {
     const actionUrl =
@@ -53,7 +66,7 @@ server.tool(
         {
           type: "text",
           text:
-            `Save in Wishfinity: ${actionUrl}\n\n` +
+            `Save for later in Wishfinity: ${actionUrl}\n\n` +
             `This opens in your browser. If you're not signed in, Wishfinity will prompt you to sign in and then save the item.`,
         },
       ],
