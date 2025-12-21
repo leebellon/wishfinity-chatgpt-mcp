@@ -12,13 +12,13 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
  *   POST /messages   -> receives MCP JSON-RPC messages
  *
  * IMPORTANT:
- * SSEServerTransport needs access to the raw request stream on /messages.
- * Do NOT use express.json() on /messages or you'll get "stream is not readable".
+ * Do NOT use express.json() on /messages.
+ * SSEServerTransport needs the raw request stream.
  */
 
 const app = express();
 
-// Use JSON parsing for non-MCP routes only
+// Only parse JSON for non-MCP routes
 app.use((req, res, next) => {
   if (req.path === "/messages") return next();
   return express.json({ limit: "1mb" })(req, res, next);
@@ -61,7 +61,7 @@ server.tool(
   }
 );
 
-// Keep active transports by sessionId (Render = long-lived process, so OK)
+// Keep active transports by sessionId
 const transports = new Map();
 
 app.get("/", (_req, res) => {
@@ -80,7 +80,7 @@ app.get("/sse", async (_req, res) => {
   await server.connect(transport);
 });
 
-// IMPORTANT: do NOT parse JSON here; keep raw request stream intact
+// Messages endpoint (raw stream)
 app.post("/messages", async (req, res) => {
   const sessionId = req.query.sessionId;
   if (!sessionId || typeof sessionId !== "string") {
