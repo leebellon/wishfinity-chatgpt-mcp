@@ -10,10 +10,19 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
  * Endpoints:
  *   GET  /sse        -> opens SSE stream (ChatGPT connects here)
  *   POST /messages   -> receives MCP JSON-RPC messages
+ *
+ * IMPORTANT:
+ * SSEServerTransport needs access to the raw request stream on /messages.
+ * Do NOT use express.json() on /messages or you'll get "stream is not readable".
  */
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+
+// Use JSON parsing for non-MCP routes only
+app.use((req, res, next) => {
+  if (req.path === "/messages") return next();
+  return express.json({ limit: "1mb" })(req, res, next);
+});
 
 const server = new McpServer({
   name: "wishfinity-plusw",
@@ -52,7 +61,7 @@ server.tool(
   }
 );
 
-// Store active transports by sessionId (works on Render because it's a single long-lived service)
+// Keep active transports by sessionId (Render = long-lived process, so OK)
 const transports = new Map();
 
 app.get("/", (_req, res) => {
@@ -62,17 +71,16 @@ app.get("/", (_req, res) => {
 // SSE endpoint
 app.get("/sse", async (_req, res) => {
   const transport = new SSEServerTransport("/messages", res);
-  const sessionId = transport.sessionId;
-  transports.set(sessionId, transport);
+  transports.set(transport.sessionId, transport);
 
   res.on("close", () => {
-    transports.delete(sessionId);
+    transports.delete(transport.sessionId);
   });
 
   await server.connect(transport);
 });
 
-// Messages endpoint
+// IMPORTANT: do NOT parse JSON here; keep raw request stream intact
 app.post("/messages", async (req, res) => {
   const sessionId = req.query.sessionId;
   if (!sessionId || typeof sessionId !== "string") {
